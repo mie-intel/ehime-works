@@ -1,0 +1,4 @@
+Part 1: N vs K (Q = 320): ours better in 41/64, median speedup 81x
+Part 2: N vs Q (K = 20): ours better in 51/64, median speedup 125x
+part 3: N=200 K=3 Q=320: 6 tours, makespan=1021
+wrote plots/results/overview_v2.png

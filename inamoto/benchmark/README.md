@@ -2,8 +2,8 @@
 
 Each grid script solves every instance **once** with three solvers and plots them side by side:
 
-- **held**: `dsu_bsta` (DSU grouping, TSP per group, BSTA to share the tours among the vehicles) with exact Held-Karp, `x_max = 10`
-- **lkh**: `dsu_bsta` with Lin-Kernighan, `x_max = 40`
+- **held**: `linesweep_dsu_tsp_bsta` (line sweep + DSU grouping, TSP per group, BSTA to share the tours among the vehicles) with exact Held-Karp, `x_max = 10`
+- **lkh**: `linesweep_dsu_tsp_bsta` with Lin-Kernighan, `x_max = 40`
 - **pyvrp**: pure PyVRP (HGS), no time limit: it stops after 20000 iterations without a new best solution
 
 The metric is the **makespan**: the time at which the slowest vehicle gets home (a vehicle may drive several
@@ -39,7 +39,7 @@ For a script named `<name>`:
 |---|---|
 | `x`, `y` | the two parameters of the cell (see the table above for which is which) |
 | `held_makespan`, `lkh_makespan`, `pyvrp_makespan` | makespan of each solver (`nan` = the solver failed or found nothing) |
-| `held_seconds`, `lkh_seconds`, `pyvrp_seconds` | wall time of each solver, including building the distance matrix |
+| `held_seconds`, `lkh_seconds`, `pyvrp_seconds` | wall time of each solver, including grouping (held, lkh) or building the distance matrix (pyvrp) |
 
 `lkh_vs_pyvrp_xmax_vs_q.csv`: `x_max`, `q`, `lkh_makespan`, `lkh_seconds`, `pyvrp_makespan`, `pyvrp_seconds`.
 pyvrp does not depend on `x_max`, so the same pyvrp numbers repeat on every row of one `q`.

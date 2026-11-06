@@ -1,4 +1,4 @@
-"""dsu_bsta with Lin-Kernighan TSP vs pyvrp: x_max (group size) vs Q (capacity), N and K fixed. 8 x 8 grid.
+"""linesweep_dsu_tsp_bsta with Lin-Kernighan TSP vs pyvrp: x_max (group size) vs Q (capacity), N and K fixed. 8 x 8 grid.
 
 pyvrp does not depend on x_max, so it runs once per Q. Left heatmap: makespan gap of lkh to pyvrp
 (negative = lkh better). Right heatmap: lkh seconds.

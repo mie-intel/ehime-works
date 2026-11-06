@@ -23,10 +23,8 @@ import numpy as np  # noqa: E402
 from matplotlib.colors import LogNorm, TwoSlopeNorm  # noqa: E402
 
 from solutions.bsta import bsta  # noqa: E402
-from solutions.dsu_tsp import build_groups  # noqa: E402
-from solutions.linesweep_dsu_tsp import solve_group  # noqa: E402
+from solutions.linesweep_dsu_tsp import linesweep_groups, solve_group  # noqa: E402
 from solutions.lkh_solver import tsp_lk  # noqa: E402
-from utils import build_dist_matrix  # noqa: E402
 from vrpgen import random_customers  # noqa: E402
 
 OUT = "plots/results/overview_v2.png"  # v1 (overview.png, bigger fonts) is kept
@@ -126,7 +124,7 @@ def solve_instance():
     coords, demands = random_customers(P3_N, coord_range=(-100, 100), demand_range=(1, 10), seed=1)
     xy = np.asarray(coords, dtype=float)
     random.seed(0)  # benchmark/common.py timed() seeds the same way before each run
-    groups = build_groups(build_dist_matrix(coords), demands, P3_Q, LKH_X_MAX, math.inf)
+    groups = linesweep_groups(xy, demands, P3_Q, LKH_X_MAX)  # same grouping as benchmark/common.py solve_lkh
     trips = [solve_group(xy, g, tsp_lk) for g in groups]
     makespan, bundles = bsta([t for _, t in trips], P3_K)
     print(f"part 3: N={P3_N} K={P3_K} Q={P3_Q}: {len(trips)} tours, makespan={makespan}")

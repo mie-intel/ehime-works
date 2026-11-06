@@ -19,7 +19,8 @@ sys.path.insert(0, ROOT)  # solutions/, utils.py and vrpgen.py live in the proje
 import numpy as np  # noqa: E402
 from matplotlib.colors import LogNorm  # noqa: E402
 
-from solutions.bsta import solve_dsu_bsta  # noqa: E402
+from solutions.dsu_tsp import tsp_heldkarp  # noqa: E402
+from solutions.linesweep_bsta import solve_linesweep_dsu_tsp_bsta  # noqa: E402
 from solutions.lkh_solver import tsp_lk  # noqa: E402
 from solutions.pyvrp_solver import solve_pyvrp  # noqa: E402
 from utils import PLOT_DIR, plt  # noqa: E402
@@ -47,11 +48,13 @@ def make_data(n, k, q, seed=1):
 
 
 def solve_held(data):
-    return solve_dsu_bsta(data, x_max=HELD_X_MAX)
+    """Line sweep + DSU grouping, exact Held-Karp per group, BSTA."""
+    return solve_linesweep_dsu_tsp_bsta(data, x_max=HELD_X_MAX, tsp=lambda D: tsp_heldkarp(D, HELD_X_MAX))
 
 
 def solve_lkh(data, x_max=LKH_X_MAX):
-    return solve_dsu_bsta(data, x_max=x_max, tsp=tsp_lk)
+    """Line sweep + DSU grouping, Lin-Kernighan per group, BSTA."""
+    return solve_linesweep_dsu_tsp_bsta(data, x_max=x_max, tsp=tsp_lk)
 
 
 SOLVE = {"held": solve_held, "lkh": solve_lkh, "pyvrp": solve_pyvrp}
@@ -135,6 +138,11 @@ def plot_grid(name, xlabel, xs, ylabel, ys, rows):
     save_figure(fig, name)
 
 
+# results already solved in this process, by instance name (n, k, q; seed is always 1).
+# Grids run in the same process share cells (e.g. N vs K at K = 20 and N vs Q at Q = 320), so each is solved once.
+SOLVED = {}
+
+
 def run_grid_benchmark(name, xlabel, xs, ylabel, ys, build):
     """Solve every cell once with held, lkh and pyvrp, save results/<name>.csv, plot all three side by side."""
     csv_path = f"results/{name}.csv"
@@ -145,11 +153,14 @@ def run_grid_benchmark(name, xlabel, xs, ylabel, ys, build):
         for y in ys:
             for x in xs:
                 data = build(x, y)
-                row = {"x": x, "y": y}
-                for s, solve in SOLVE.items():
-                    row[f"{s}_makespan"], row[f"{s}_seconds"] = timed(solve, data)
+                reused = data["name"] in SOLVED
+                if not reused:
+                    SOLVED[data["name"]] = {f"{s}_{m}": v for s, solve in SOLVE.items()
+                                            for m, v in zip(("makespan", "seconds"), timed(solve, data))}
+                row = {"x": x, "y": y, **SOLVED[data["name"]]}
                 rows.append(row)
                 print(f"{xlabel}={x:<5} {ylabel}={y:<5} " + "  ".join(
-                    f"{s}={row[f'{s}_makespan']} ({row[f'{s}_seconds']:.2f}s)" for s in SOLVERS))
+                    f"{s}={row[f'{s}_makespan']} ({row[f'{s}_seconds']:.2f}s)" for s in SOLVERS)
+                    + ("  [reused, solved earlier in this run]" if reused else ""))
             save_csv(csv_path, GRID_FIELDS, rows)  # keep progress if a later row is interrupted
     plot_grid(name, xlabel, xs, ylabel, ys, rows)
