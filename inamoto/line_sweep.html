@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Line sweep pruning</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --fg: #1b1f24; --muted: #667085; --line: #d9dde3;
+    --pt: #8a94a6; --evict: #c4c9d2; --win: #2563eb; --cur: #ea580c; --keep: #16a34a;
+    --rej: #dc2626; --cand: #7c3aed; --band: rgba(37,99,235,.06); --box: rgba(37,99,235,.13);
+    --btn: #eef0f4; --btnfg: #1b1f24; --accent: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --panel: #1d2026; --fg: #e6e8ec; --muted: #9aa3b2; --line: #343944;
+      --pt: #7b8496; --evict: #474d5a; --win: #5b9bff; --cur: #fb923c; --keep: #4ade80;
+      --rej: #f87171; --cand: #a78bfa; --band: rgba(91,155,255,.07); --box: rgba(91,155,255,.16);
+      --btn: #2a2e37; --btnfg: #e6e8ec; --accent: #5b9bff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  canvas { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; background: var(--panel); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .legend i.sq { border-radius: 2px; }
+  .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .msg { min-height: 5.6em; }
+  .msg .tag { display: inline-block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 1px 7px; border-radius: 10px; background: var(--btn); color: var(--muted); margin-bottom: 4px; }
+  .msg p { margin: 2px 0 0; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: inherit; font-size: 14px; padding: 6px 11px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--btn); color: var(--btnfg); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .progress { height: 4px; background: var(--btn); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; }
+  .stepno { font-size: 12.5px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .params { display: grid; grid-template-columns: auto 1fr 3.2em; gap: 6px 10px; align-items: center; font-size: 13.5px; }
+  .params output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  input[type=range] { width: 100%; min-width: 0; accent-color: var(--accent); }
+  .stats { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .stats b { text-align: right; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; min-height: 28px; }
+  .chip { font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line);
+    font-variant-numeric: tabular-nums; }
+  .chip.cand { border-color: var(--cand); color: var(--cand); }
+  .chip.now { background: var(--cand); border-color: var(--cand); color: #fff; }
+  .note { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+  code { font-size: 12.5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Line sweep pruning</h1>
+  <p class="sub">How <code>band_edges</code> finds every pair of points with <code>lo &lt; dist &le; X</code> without comparing all
+    pairs. A vertical line sweeps left to right. Each new point is only compared with the few points that sit in a
+    window behind the line.</p>
+
+  <div class="layout">
+    <div class="card">
+      <canvas id="cv"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--cur)"></i>current point</span>
+        <span><i style="background:var(--win)"></i>in window</span>
+        <span><i style="background:var(--cand)"></i>candidate (inside the box)</span>
+        <span><i style="background:var(--evict)"></i>removed from window</span>
+        <span><i style="background:var(--pt)"></i>not reached yet</span>
+        <span><i class="sq" style="background:var(--keep)"></i>edge kept</span>
+        <span><i class="sq" style="background:var(--rej)"></i>pair rejected</span>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <div class="msg" id="msg"></div>
+        <div class="progress"><div id="bar"></div></div>
+        <div class="stepno" id="stepno"></div>
+        <div class="buttons" style="margin-top:10px">
+          <button id="bReset" title="Back to the start">&#9198; Reset</button>
+          <button id="bBack" title="Left arrow">&#9664; Back</button>
+          <button id="bStep" class="primary" title="Right arrow">Step &#9654;</button>
+          <button id="bPoint" title="Jump to the start of the next point">Next point &#9197;</button>
+          <button id="bPlay" title="Space">Play</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Window, sorted by y</h2>
+        <div class="chips" id="win"></div>
+        <p class="note">Only the violet ones are inside the box <code>y &plusmn; X</code>, found by binary search.</p>
+      </div>
+
+      <div class="card">
+        <h2>Work so far</h2>
+        <div class="stats">
+          <span>pairs checked by the sweep</span><b id="sChecked">0</b>
+          <span>pairs checked by brute force</span><b id="sBrute">0</b>
+          <span>edges kept</span><b id="sKept">0</b>
+          <span>points in window</span><b id="sWin">0</b>
+        </div>
+        <p class="note" id="sNote"></p>
+      </div>
+
+      <div class="card">
+        <h2>Settings</h2>
+        <div class="params">
+          <label for="pN">points</label><input id="pN" type="range" min="10" max="60" value="28"><output id="oN"></output>
+          <label for="pX">X (band end)</label><input id="pX" type="range" min="6" max="40" value="16"><output id="oX"></output>
+          <label for="pLo">lo (band start)</label><input id="pLo" type="range" min="0" max="35" value="0"><output id="oLo"></output>
+          <label for="pSp">play speed</label><input id="pSp" type="range" min="1" max="10" value="4"><output id="oSp"></output>
+        </div>
+        <div class="buttons" style="margin-top:10px"><button id="bSeed">New random points</button></div>
+        <p class="note">Set <code>lo</code> above 0 to see the later rounds of the doubling bands: pairs closer than <code>lo</code> were already handled and get rejected.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ---------- points and the algorithm (a step-by-step copy of band_edges) ----------
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function makePoints(n, seed) {
+  const r = mulberry32(seed), a = [];
+  for (let i = 0; i < n; i++) a.push({ x: r() * 100, y: r() * 100 });
+  a.sort((u, v) => u.x - v.x);  // sweep order: sorted by x
+  return a.map((p, i) => ({ id: i, x: p.x, y: p.y }));
+}
+
+function simulate(P, X, lo) {
+  const ev = [], win = [], X2 = X * X, lo2 = lo * lo;  // win: point ids kept sorted by y
+  const bisectLeft = v => { let l = 0, h = win.length; while (l < h) { const m = (l + h) >> 1; if (P[win[m]].y < v) l = m + 1; else h = m; } return l; };
+  const bisectRight = v => { let l = 0, h = win.length; while (l < h) { const m = (l + h) >> 1; if (P[win[m]].y <= v) l = m + 1; else h = m; } return l; };
+  let left = 0;
+  for (let p = 0; p < P.length; p++) {
+    const { x, y } = P[p];
+    ev.push({ t: 'sweep', p });
+    while (P[left].x < x - X) {  // too far behind the sweep line: can never pair with p or later points
+      win.splice(win.indexOf(left), 1);
+      ev.push({ t: 'evict', p, q: left });
+      left++;
+    }
+    const cand = win.slice(bisectLeft(y - X), bisectRight(y + X));
+    ev.push({ t: 'query', p, cand, win: win.length });
+    for (const q of cand) {
+      const dx = x - P[q].x, dy = y - P[q].y, d2 = dx * dx + dy * dy;
+      const ok = d2 > lo2 && d2 <= X2;
+      ev.push({ t: 'check', p, q, d: Math.sqrt(d2), ok, why: ok ? 'keep' : (d2 > X2 ? 'far' : 'near') });
+    }
+    const k = bisectRight(y);
+    win.splice(k, 0, p);
+    ev.push({ t: 'insert', p, k });
+  }
+  ev.push({ t: 'done' });
+  return ev;
+}
+
+// ---------- state at a given step (replay events 0..i) ----------
+function stateAt(P, ev, i) {
+  const s = { cur: -1, win: [], evicted: new Set(), cand: [], checking: null, edges: [], checked: 0, brute: 0, kind: null, ev: i >= 0 ? ev[i] : null };
+  for (let j = 0; j <= i; j++) {
+    const e = ev[j];
+    s.kind = e.t;
+    if (e.t === 'sweep') { s.cur = e.p; s.cand = []; s.checking = null; s.brute += e.p; }
+    else if (e.t === 'evict') { s.win.splice(s.win.indexOf(e.q), 1); s.evicted.add(e.q); }
+    else if (e.t === 'query') { s.cand = e.cand; }
+    else if (e.t === 'check') { s.checked++; s.checking = e; if (e.ok) s.edges.push([e.p, e.q]); }
+    else if (e.t === 'insert') { s.win.splice(e.k, 0, e.p); s.checking = null; s.cand = []; }
+  }
+  return s;
+}
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+const A = { P: [], ev: [], i: -1, X: 16, lo: 0, seed: 7, timer: null };
+
+function rebuild(newSeed) {
+  if (newSeed) A.seed = Math.floor(Math.random() * 1e9);
+  const n = +$('pN').value;
+  A.X = +$('pX').value;
+  $('pLo').max = A.X - 1;
+  if (+$('pLo').value > A.X - 1) $('pLo').value = A.X - 1;
+  A.lo = +$('pLo').value;
+  A.P = makePoints(n, A.seed);
+  A.ev = simulate(A.P, A.X, A.lo);
+  A.i = -1;
+  stop();
+  $('oN').textContent = n; $('oX').textContent = A.X; $('oLo').textContent = A.lo; $('oSp').textContent = $('pSp').value;
+  render();
+}
+
+const f1 = v => v.toFixed(1);
+
+function message(s) {
+  const e = s.ev, P = A.P;
+  if (!e) return ['start', 'The points are sorted by x. Press <b>Step</b> to start the sweep line at the left. It visits the points one by one, and for each point does four things: move, remove, look up, insert.'];
+  if (e.t === 'sweep') return ['1 · move', `Sweep line moves to point <b>#${e.p}</b> (x = ${f1(P[e.p].x)}). The window holds ${s.win.length} point${s.win.length === 1 ? '' : 's'}: those behind the line that might still be within X = ${A.X}.`];
+  if (e.t === 'evict') return ['2 · remove', `Point <b>#${e.q}</b> is more than X to the left of the line (x = ${f1(P[e.q].x)} &lt; ${f1(P[e.p].x - A.X)}). It is too far in x for #${e.p} and for every later point, so it leaves the window for good.`];
+  if (e.t === 'query') {
+    const m = e.cand.length;
+    return ['3 · look up', `The window is sorted by y, so a binary search finds the points with y in [${f1(P[e.p].y - A.X)}, ${f1(P[e.p].y + A.X)}] without scanning the rest. ${m === 0 ? 'None are in that range, so #' + e.p + ' has nothing to compare with.' : `<b>${m}</b> of ${e.win} window points ${m === 1 ? 'is a candidate' : 'are candidates'}; the other ${e.win - m} are never touched.`}`];
+  }
+  if (e.t === 'check') {
+    const dx = Math.abs(P[e.p].x - P[e.q].x), dy = Math.abs(P[e.p].y - P[e.q].y);
+    const base = `#${e.p} – #${e.q}: dx = ${f1(dx)}, dy = ${f1(dy)}, distance = <b>${f1(e.d)}</b>. `;
+    if (e.ok) return ['3 · check', base + `${A.lo > 0 ? lo_text() : ''}It is at most X = ${A.X}, so the edge is <b style="color:var(--keep)">kept</b>.`];
+    if (e.why === 'far') return ['3 · check', base + `It is inside the box but outside the circle of radius X = ${A.X}, so the pair is <b style="color:var(--rej)">rejected</b>.`];
+    return ['3 · check', base + `It is not more than lo = ${A.lo}. Such pairs belong to an earlier band, so the pair is <b style="color:var(--rej)">rejected</b> here.`];
+  }
+  if (e.t === 'insert') return ['4 · insert', `Point <b>#${e.p}</b> is inserted into the window at its place in the y order (position ${e.k + 1}), so the later points can compare with it.`];
+  const n = A.P.length, brute = n * (n - 1) / 2;
+  return ['done', `Sweep finished. It checked <b>${s.checked}</b> pairs instead of ${brute} (${(100 * (1 - s.checked / brute)).toFixed(0)}% fewer) and kept <b>${s.edges.length}</b> edges. These are exactly the edges of the band (${A.lo}, ${A.X}].`];
+}
+function lo_text() { return `It is more than lo = ${A.lo} and `; }
+
+function render() {
+  const s = stateAt(A.P, A.ev, A.i), P = A.P;
+  const [tag, html] = message(s);
+  $('msg').innerHTML = `<span class="tag">${tag}</span><p>${html}</p>`;
+  $('bar').style.width = (100 * (A.i + 1) / A.ev.length) + '%';
+  $('stepno').textContent = `step ${A.i + 1} of ${A.ev.length}`;
+
+  const n = P.length, brute = n * (n - 1) / 2;
+  $('sChecked').textContent = s.checked;
+  $('sBrute').textContent = s.brute;
+  $('sKept').textContent = s.edges.length;
+  $('sWin').textContent = s.win.length;
+  $('sNote').textContent = A.i === A.ev.length - 1
+    ? `All ${n} points done: ${s.checked} checks against ${brute} for brute force.`
+    : 'Brute force would compare each new point with every earlier point.';
+
+  const cand = new Set(s.cand), now = s.checking ? s.checking.q : -1;
+  $('win').innerHTML = s.win.map(id =>
+    `<span class="chip${id === now ? ' now' : cand.has(id) ? ' cand' : ''}">#${id} · y ${f1(P[id].y)}</span>`).join('') || '<span class="note">empty</span>';
+
+  draw(s);
+  $('bBack').disabled = A.i < 0;
+  $('bReset').disabled = A.i < 0;
+  const last = A.i >= A.ev.length - 1;
+  $('bStep').disabled = last; $('bPoint').disabled = last;
+}
+
+function draw(s) {
+  const P = A.P, dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement), col = n => css.getPropertyValue(n).trim();
+  const pad = 16, u = (w - 2 * pad) / 100;
+  const sx = v => pad + v * u, sy = v => h - pad - v * u, X = A.X;
+
+  ctx.strokeStyle = col('--line'); ctx.lineWidth = 1; ctx.strokeRect(pad, pad, w - 2 * pad, h - 2 * pad);
+
+  if (s.cur >= 0) {
+    const c = P[s.cur];
+    ctx.fillStyle = col('--band');  // the window: everything within X behind the line
+    ctx.fillRect(sx(Math.max(0, c.x - X)), pad, sx(c.x) - sx(Math.max(0, c.x - X)), h - 2 * pad);
+    ctx.fillStyle = col('--box');   // the box where candidates live
+    const x0 = Math.max(0, c.x - X), y0 = Math.max(0, c.y - X), y1 = Math.min(100, c.y + X);
+    ctx.fillRect(sx(x0), sy(y1), sx(c.x) - sx(x0), sy(y0) - sy(y1));
+    ctx.strokeStyle = col('--win'); ctx.setLineDash([4, 4]); ctx.beginPath();
+    ctx.moveTo(sx(c.x - X), pad); ctx.lineTo(sx(c.x - X), h - pad); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  ctx.strokeStyle = col('--keep'); ctx.globalAlpha = .55; ctx.lineWidth = 1.4;
+  for (const [a, b] of s.edges) { ctx.beginPath(); ctx.moveTo(sx(P[a].x), sy(P[a].y)); ctx.lineTo(sx(P[b].x), sy(P[b].y)); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+
+  if (s.cur >= 0) {
+    const c = P[s.cur];
+    ctx.strokeStyle = col('--cur'); ctx.lineWidth = 2;   // the sweep line
+    ctx.beginPath(); ctx.moveTo(sx(c.x), pad); ctx.lineTo(sx(c.x), h - pad); ctx.stroke();
+    ctx.lineWidth = 1.2; ctx.setLineDash([5, 4]);        // circle of radius X, and the inner circle lo
+    ctx.beginPath(); ctx.arc(sx(c.x), sy(c.y), X * u, 0, 7); ctx.stroke();
+    if (A.lo > 0) { ctx.beginPath(); ctx.arc(sx(c.x), sy(c.y), A.lo * u, 0, 7); ctx.stroke(); }
+    ctx.setLineDash([]);
+  }
+
+  if (s.checking) {
+    const c = s.checking, a = P[c.p], b = P[c.q];
+    ctx.strokeStyle = c.ok ? col('--keep') : col('--rej'); ctx.lineWidth = 2.5;
+    if (!c.ok) ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(sx(a.x), sy(a.y)); ctx.lineTo(sx(b.x), sy(b.y)); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  const inWin = new Set(s.win), cand = new Set(s.cand);
+  const showIds = P.length <= 40;
+  ctx.font = '10px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+  for (const p of P) {
+    let fill = col('--pt'), r = 3.6, alpha = .65;
+    if (s.evicted.has(p.id)) { fill = col('--evict'); alpha = .9; }
+    else if (inWin.has(p.id)) { fill = col('--win'); alpha = 1; }
+    if (p.id === s.cur) { fill = col('--cur'); r = 6; alpha = 1; }
+    ctx.globalAlpha = alpha; ctx.fillStyle = fill;
+    ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), r, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+    if (cand.has(p.id) && p.id !== s.cur) {
+      ctx.strokeStyle = col('--cand'); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), 8, 0, 7); ctx.stroke();
+    }
+    if (showIds) { ctx.fillStyle = col('--fg'); ctx.globalAlpha = .7; ctx.fillText(p.id, sx(p.x) + 8, sy(p.y) - 7); ctx.globalAlpha = 1; }
+  }
+}
+
+// ---------- controls ----------
+function stepForward() { if (A.i < A.ev.length - 1) { A.i++; render(); } else stop(); }
+function stepBack() { if (A.i >= 0) { A.i--; render(); } }
+function nextPoint() {
+  let j = A.i + 1;
+  while (j < A.ev.length - 1 && A.ev[j].t !== 'sweep') j++;
+  A.i = Math.min(Math.max(j, A.i + 1), A.ev.length - 1);
+  render();
+}
+function stop() { if (A.timer) { clearInterval(A.timer); A.timer = null; } $('bPlay').textContent = 'Play'; }
+function play() {
+  if (A.timer) { stop(); return; }
+  if (A.i >= A.ev.length - 1) A.i = -1;
+  $('bPlay').textContent = 'Pause';
+  A.timer = setInterval(stepForward, 1100 - 100 * +$('pSp').value);
+}
+
+$('bStep').onclick = () => { stop(); stepForward(); };
+$('bBack').onclick = () => { stop(); stepBack(); };
+$('bPoint').onclick = () => { stop(); nextPoint(); };
+$('bReset').onclick = () => { stop(); A.i = -1; render(); };
+$('bPlay').onclick = play;
+$('bSeed').onclick = () => rebuild(true);
+for (const id of ['pN', 'pX', 'pLo']) $(id).oninput = () => rebuild(false);
+$('pSp').oninput = () => { $('oSp').textContent = $('pSp').value; if (A.timer) { stop(); play(); } };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowRight') { stop(); stepForward(); }
+  else if (e.key === 'ArrowLeft') { stop(); stepBack(); }
+  else if (e.key === ' ') { e.preventDefault(); play(); }
+});
+window.addEventListener('resize', render);
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+
+rebuild(false);
+</script>
+</body>
+</html>

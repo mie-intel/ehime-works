@@ -1,0 +1,14 @@
+[project]
+name = "inamoto"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "highspy>=1.15.1",
+    "lk-heuristic>=0.0.4",
+    "numpy>=2.5.4",
+    "pulp>=3.0,<4",
+    "pyvrp>=0.14.1",
+    "vrplib>=2.2.0",
+]

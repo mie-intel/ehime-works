@@ -1,0 +1,17 @@
+# Benchmark "c17" written by ABC on Wed Oct 21 15:39:47 2026
+.model c17
+.inputs 1gat 2gat 3gat 6gat 7gat
+.outputs 22gat 23gat
+.names 1gat 3gat new_n8_
+11 1
+.names 3gat 6gat new_n9_
+11 1
+.names 2gat new_n9_ new_n10_
+10 1
+.names new_n8_ new_n10_ 22gat
+00 0
+.names 7gat new_n9_ new_n12_
+10 1
+.names new_n10_ new_n12_ 23gat
+00 0
+.end

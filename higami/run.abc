@@ -1,0 +1,5 @@
+read_bench c17.bench
+print_stats
+strash
+print_stats
+write_blif c17.blif

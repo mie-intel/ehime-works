@@ -1,0 +1,54 @@
+NAME : instance-n20-k3
+COMMENT : random instance with 20 customers and 3 vehicles, capacity 18
+TYPE : CVRP
+DIMENSION : 21
+EDGE_WEIGHT_TYPE : EUC_2D
+CAPACITY : 18
+NODE_COORD_SECTION
+1 0 0
+2 -66 45
+3 95 -84
+4 -35 -70
+5 26 94
+6 15 20
+7 66 -3
+8 -47 -76
+9 24 -93
+10 -1 10
+11 55 95
+12 96 -100
+13 78 14
+14 -32 84
+15 -42 51
+16 -74 -19
+17 -93 -95
+18 -94 66
+19 38 -98
+20 -3 75
+21 -45 8
+DEMAND_SECTION
+1 0
+2 1
+3 9
+4 4
+5 8
+6 8
+7 9
+8 4
+9 6
+10 4
+11 4
+12 8
+13 5
+14 1
+15 7
+16 9
+17 2
+18 3
+19 5
+20 2
+21 6
+DEPOT_SECTION
+1
+-1
+EOF

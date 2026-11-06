@@ -1,0 +1,4 @@
+pulp>=3.0,<4
+highspy
+vrplib
+numpy
