@@ -9,15 +9,17 @@ from utils import build_dist_matrix
 log = logging.getLogger(__name__)
 
 
-def bsta_pack(times, K, m):
+def bsta_pack(times, K, m, order=None):
     """Can the tours be given to <= K vehicles, each vehicle driving <= m in total?
 
     Two pointers over tours sorted by time (ll = smallest, rr = largest): if tour ll still fits
     on bundle rr, merge it in, else bundle rr is full and closed. Returns bundles of tour indices, or None.
+    order: tour indices sorted by time; pass it in to skip the O(G log G) sort on every call.
     """
     if max(times) > m:
         return None
-    order = sorted(range(len(times)), key=times.__getitem__)
+    if order is None:
+        order = sorted(range(len(times)), key=times.__getitem__)
     t = [times[i] for i in order]
     bundles = [[i] for i in order]
     ll, rr = 0, len(t) - 1
@@ -35,11 +37,12 @@ def bsta_pack(times, K, m):
 def bsta(times, K):
     """Smallest m for which bsta_pack succeeds. Returns (makespan, bundles of tour indices), len(bundles) <= K."""
     times = [int(t) for t in times]  # integer search space only
+    order = sorted(range(len(times)), key=times.__getitem__)  # sort once: O(G log G)
     lo, hi = max(times), sum(times)
-    best = bsta_pack(times, K, hi)  # one vehicle takes everything
+    best = bsta_pack(times, K, hi, order)  # one vehicle takes everything
     while lo < hi:
         mid = (lo + hi) // 2
-        packed = bsta_pack(times, K, mid)
+        packed = bsta_pack(times, K, mid, order)  # O(G) per check
         if packed is None:
             lo = mid + 1
         else:
