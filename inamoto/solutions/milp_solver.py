@@ -1,4 +1,4 @@
-"""MILP solvers (PuLP + HiGHS): the plain exact model, and the grouped model that keeps TSP edges (see RESPONSE.md).
+"""MILP solvers (PuLP + HiGHS): the plain exact model, and the grouped model that keeps TSP edges (see docs/RESPONSE.md).
 
 A vehicle may drive several tours (depot -> customers -> depot) one after another; the objective is the makespan.
 """

@@ -1,4 +1,4 @@
-"""Entry point: read an instance and run the chosen solvers (see problem.md)."""
+"""Entry point: read an instance and run the chosen solvers (see docs/problem.md)."""
 
 import logging
 import sys
