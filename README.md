@@ -4,9 +4,9 @@ A fast heuristic for **multi-trip vehicle routing that minimises the makespan**
 (the time the last vehicle gets back to the depot).
 
 This repo holds the code and data behind the slides
-[`PDF`](FINAL_ZEMI-Polikarpus_Arya_Pradhanika.pdf),
-[`PPT`](Group_Solve_Merge_1.pptx),
-[`POSTER`]([REV_3]-POSTER_POLIKARPUS_ARYA.pdf),
+[`PDF`](inamoto/presentation/FINAL_ZEMI-Polikarpus_Arya_Pradhanika.pdf),
+[`PPT`](inamoto/presentation/Group_Solve_Merge_1.pptx),
+[`POSTER`](inamoto/presentation/%5BREV_3%5D-POSTER_POLIKARPUS_ARYA.pdf),
 (Polikarpus Arya Pradhanika, Ehime University). All the code is in [`inamoto/`](inamoto/).
 
 ---
@@ -53,6 +53,7 @@ inamoto/
 ├── results/          benchmark CSVs
 ├── plots/            figures (poster/ = method pictures, results/ = result figure)
 ├── logs/             logs of the last benchmark run
+├── presentation/     slides (.pptx, .pdf) and poster (.pdf)
 ├── docs/             notes: problem statement, dataset notes, MILP idea from the professor,
 │                     line-sweep demo (open line_sweep.html in a browser), TSP algorithm table
 ├── solve.py          solve one .vrp file
